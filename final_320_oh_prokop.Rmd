@@ -1,0 +1,401 @@
+---
+title: 'LNGN 320 Final Project:  Thea Oh and Tom Prokop'
+---
+
+**Potential research questions:**
+
+**1. "What makes a word recognizable?"**
+
+**2. "What are the features that make a word recognizable?"**
+
+**3. "What are the features that make a word hard to recognize?"**
+
+```{r echo=FALSE, results=FALSE}
+suppressMessages(library(readr))
+suppressMessages(library(ggplot2))
+suppressMessages(library(modelr))
+suppressMessages(library(tidyverse))
+suppressMessages(library(dplyr))
+suppressMessages(library(scales))
+suppressMessages(library(extrafont))
+suppressMessages(library(ggridges))
+```
+### The Dataset:
+
+The dataset we are using is from the [British Lexicon Project](http://crr.ugent.be/programs-data/lexicon-projects).  The data gathered here was part of an experiment to determine whether or not humans can identify real or fake words.  In the experiment, British subjects were presented with a word and tasked with identifying whether or not it is a real or fake English word, as quickly and as accurately as possible. The dataset used in our project contains the aggregate results of all words presented to the subjects, including response time and accuracy for each individual word.  In addition, we have a corresponding dataset that contains linguistic characteristics for each word, such as the number of syllables, the word length, morphological breakdowns, etc.
+
+In our project, we will focus specifically on the relationship between response time and response accuracy as well as their relationship to the following linguistic features: nletters (word length), coltheart.N (number of words with a minimum edit distance of 1), parts of speech, and morphological features.
+
+
+### Our Predictions:
+
+We define response time as "confidence" in one's answer and accuracy as a measure of the sense of "familiarity" a word inspires.  We hypothesize that words that prompt low response times and high accuracy scores are those which are most "word-like", in that the word is familiar enough to the speaker that they answer quickly and confidently.
+
+```{r echo=FALSE, warnings=FALSE}
+# Import datasets
+
+load("blp-items.Rdata")
+data <- read.csv("blp-stimuli.csv", header=TRUE)
+
+data <- merge(blp.items, data, by="spelling")
+data<-data %>% drop_na(rt) # Drop rows with NA value in rt column
+
+# Divide data into dataframes containing non-words and real words
+nonwords <- data %>%
+  filter(lexicality == "N")
+
+realwords <- data %>%
+  filter(lexicality == "W")
+
+# Word-like theory -- table format
+wl_theory <- matrix(c('Confident & Familiar','Confident & Unfamiliar','Unconfident & Familiar', 'Unconfident & Unfamiliar'),ncol=2,byrow=TRUE)
+colnames(wl_theory) <- c("High Accuracy","Low Accuracy")
+rownames(wl_theory) <- c("Low RT","High RT")
+wl_theory <- as.table(wl_theory)
+wl_theory
+```
+
+
+### How is the data distributed?
+
+Preliminary analysis reveals clear distributional differences in the reaction times and accuracy scores of participants. As seen below, participants more accurately identified non-words as being nonwords, than they did real words as being real words. 
+
+Participants also exhibited shorter reaction times in response to shorter words than longer words, possibly owing to the fact that longer words require more mental pre-processing.
+
+We can look at the distributions of the response time and the accuracy for both real words and non-real words.  What we want to see here is where the quartiles fall and whether the distribution is normal, left-skewed, or right-skewed.
+
+
+
+```{r echo=FALSE, warnings=FALSE, results=FALSE}
+# Boxplot -- distribution into quartiles
+ggplot(data, aes(y=accuracy, x = lexicality, color=lexicality)) + 
+  geom_boxplot(show.legend = FALSE) + 
+  scale_color_manual(values=c("#E69F00", "palegreen4"))+
+  scale_x_discrete(labels = c('Non-Word','Real-Word'))+
+  labs(title = "Real-Word vs. Non-Word Accuracy", y = "% Accurate", x = "Lexicality")+
+  theme_minimal()+
+  theme(text = element_text(family="serif"),plot.title = element_text(hjust=.5, size=16))+
+  stat_summary(fun.y=mean, colour="red", geom="point", size=2)+
+  stat_summary(fun.y=mean, colour="red", geom="text", size=3.5,
+               vjust=-0.7, aes(label=round(..y.., digits=3)))
+
+ggplot(data, aes(y=rt, x = lexicality, color=lexicality)) + 
+  scale_color_manual(values=c("#E69F00", "palegreen4"))+
+  geom_boxplot(show.legend = FALSE) + 
+  scale_x_discrete(labels = c('Non-Word','Real-Word'))+
+  labs(title = "Real-Word vs. Non-Word Reaction Time", y = "Reaction Time (ms)", x = "Lexicality")+
+  theme_minimal()+
+  theme(text = element_text(family="serif"),plot.title = element_text(hjust=.5, size=16))+
+  stat_summary(fun.y=mean, colour="red", geom="point", size=2)+
+  stat_summary(fun.y=mean, colour="red", geom="text", size=3.5,
+               vjust=-0.7, aes(label=round(..y.., digits=3)))
+```
+
+
+Evidently, the distribution for accuracy in both real words and non-real words is heavily left-skewed or "top heavy."  That being said, the distribution for non-real words is far more concentrated than that of real words.  Furthermore, the response time for both datasets is right-skewed.  
+
+Given this information, we can infer that there are a high amount of high accuracy words and words with low response times across both datasets; participants performed quickly and accurately on most words, both real and non-real.
+
+
+```{r echo=FALSE, warnings=FALSE}
+# Scatter plot -- general distribution of performance
+# Color coded for number of letters in target word
+# Separate graphs for Real and Non-real
+
+ggplot(realwords, aes(x = accuracy, y = rt))+
+  geom_jitter(aes(color = nletters), alpha=.6)+
+  scale_colour_gradientn(colors = topo.colors(10))+
+  theme_minimal()+
+  labs(title = "Reaction Time vs. Accuracy (Real Words)", y = "Reaction Time (ms)", x = "Accuracy")+
+  theme(text = element_text(family="serif"),plot.title = element_text(hjust=.5, size=16))
+
+# Nonwords are on a power 10 scale, to better show gradient
+ggplot(nonwords, aes(x = accuracy, y = rt))+
+  geom_jitter(aes(color = nletters), alpha=.6)+
+  scale_colour_gradientn(colors = topo.colors(10))+
+  #geom_point(color = "plum3")+
+  theme_minimal()+
+  coord_trans(x = scales::exp_trans(10))+
+  labs(title = "Reaction Time vs. Accuracy (Non Words)", y = "Reaction Time (ms)", x = "Accuracy", caption="* x-axis on power 10 scale for ease of viewing")+
+  theme(text = element_text(family="serif"),plot.title = element_text(hjust=.5, size=16))
+```
+
+Further examination into the data reveals that participants were able to identify non-words with an average accuracy of 94%. By contrast, they were able to achieve only a 76% accuracy rate in identifying real words.
+
+When we apply a word attribute, for example "nletters", which is a count of the number of letters in the word, there arises a clear relationship between attribute, accuracy, and response time.  In this case of nletters,  we can see a pattern that a smaller letter count trends to lower response times.  This indicates that words with smaller letters counts prompt higher confidence in decision making.  Therefore, we conclude that letter count is a feature that determines whether or not a word is "word-like."
+
+Let's continue by quantifying these quantiles and filtering out the middle 50% of datapoints.  This allows us to look at the extremes on both the high and low ends of accuracy and response time.  We can then plot these quantiles according to Table 1 and apply more features to see the trends of the extremes. In this way, we will take a closer look at the relationships between features, accuracy, and response time.
+
+
+```{r echo=FALSE, warnings=FALSE, results=FALSE}
+
+# Quantiles
+nonqu_rt <- quantile(na.omit(nonwords$rt), c(0.25, 0.75))
+nonqu_acc <- quantile(nonwords$accuracy, c(0.25, 0.75))
+realqu_rt <- quantile(na.omit(realwords$rt), c(0.25, 0.75))
+realqu_acc <- quantile(realwords$accuracy, c(0.25, 0.75))
+
+low_low_r <- realwords %>%
+  filter((rt <= realqu_rt[1]) & (accuracy <= realqu_acc[1]))
+low_high_r <- realwords %>%
+  filter((rt < realqu_rt[1]) & (accuracy >= realqu_acc[2]))
+high_low_r <- realwords %>%
+  filter((rt > realqu_rt[2]) & (accuracy < realqu_acc[1]))
+high_high_r <- realwords %>%
+  filter((rt > realqu_rt[2]) & (accuracy >= realqu_acc[2]))
+
+non_rt_ext <- nonwords %>%
+  filter((rt < nonqu_rt[1] | rt > nonqu_rt[2]) & (accuracy < nonqu_acc[1] | accuracy >= nonqu_acc[2]))
+
+low_low_n <- nonwords %>%
+  filter((rt <= nonqu_rt[1]) & (accuracy <= nonqu_acc[1]))
+low_high_n <- nonwords %>%
+  filter((rt < nonqu_rt[1]) & (accuracy >= nonqu_acc[2]))
+high_low_n <- nonwords %>%
+  filter((rt > nonqu_rt[2]) & (accuracy < nonqu_acc[1]))
+high_high_n <- nonwords %>%
+  filter((rt > nonqu_rt[2]) & (accuracy >= nonqu_acc[2]))
+
+real_rt_ext <- realwords %>%
+  filter((rt < realqu_rt[1] | rt > realqu_rt[2]) & (accuracy < realqu_acc[1] | accuracy >= realqu_acc[2]))
+
+non_fifty <- ggplot(non_rt_ext, aes(x=accuracy, y=rt)) + geom_point(aes(color=nletters)) +   scale_colour_gradientn(colors = terrain.colors(10))+
+  labs(title = "Non-Words Top/Bottom 25%", y = "Reaction Time (ms)", x = "Accuracy", color="# letters")+
+  theme_minimal()+
+  theme(text = element_text(family="serif"),plot.title = element_text(hjust=.5, size=16))
+
+real_fifty <- ggplot(real_rt_ext, aes(x=accuracy, y=rt)) + geom_point(aes(color=nletters)) +   scale_colour_gradientn(colors = terrain.colors(10))+
+  labs(title = "Real Words Top/Bottom 25%", y = "Reaction Time (ms)", x = "Accuracy", color="# letters")+
+  theme_minimal()+
+  theme(text = element_text(family="serif"),plot.title = element_text(hjust=.5, size=16))
+
+non_fifty
+real_fifty
+
+```
+
+This chart is the same as that from above; however, in these graphs, the middle 50% of data has been removed, leaving only the top 25% and bottom 25%.  We are left with four quadrants giving the extremes of the data in Table 1.  We can examine these quadrants individually for patterns and insights.
+
+```{r echo=FALSE, warnings=FALSE, results=FALSE}
+# Looking at quartiles
+quantiles_real_acc <- quantile(realwords$accuracy,c(.25,.75))
+quantiles_fake_acc <- quantile(nonwords$accuracy,c(.25,.75))
+quantiles_real_rt <- quantile(realwords$rt,c(.25,.75))
+quantiles_fake_rt <-quantile(nonwords$rt,c(.25,.75))
+
+highacc_highrt_w <- data %>%
+  filter((accuracy >= quantiles_real_acc[2]) & (rt>=quantiles_real_rt[2]))%>%
+  mutate(performance="Hi ACC, Hi RT")%>%
+  mutate(lexicality="Real word")
+
+highacc_lowrt_w <- data %>%
+  filter((accuracy >= quantiles_real_acc[2]) & (rt<=quantiles_real_rt[1]))%>%
+  mutate(performance="Hi ACC, Lo RT")%>%
+  mutate(lexicality="Real word")
+
+lowacc_highrt_w <- data %>%
+  filter((accuracy <= quantiles_real_acc[1]) & (rt>=quantiles_real_rt[2]))%>%
+  mutate(performance="Lo ACC, Hi RT")%>%
+  mutate(lexicality="Real word")
+
+lowacc_lowrt_w <- data %>%
+  filter((accuracy <= quantiles_real_acc[1]) & (rt<=quantiles_real_rt[1]))%>%
+  mutate(performance="Lo ACC, Lo RT")%>%
+  mutate(lexicality="Real word")
+
+highacc_highrt_n <- data %>%
+  filter((accuracy >= quantiles_fake_acc[2]) & (rt>=quantiles_fake_rt[2]))%>%
+  mutate(performance="Hi ACC, Hi RT")%>%
+  mutate(lexicality="Non-word")
+
+highacc_lowrt_n <- data %>%
+  filter((accuracy >= quantiles_fake_acc[2]) & (rt<=quantiles_fake_rt[1]))%>%
+  mutate(performance="Hi ACC, Lo RT")%>%
+  mutate(lexicality="Non-word")
+
+lowacc_highrt_n <- data %>%
+  filter((accuracy <= quantiles_fake_acc[1]) & (rt>=quantiles_fake_rt[2]))%>%
+  mutate(performance="Lo ACC, Hi RT")%>%
+  mutate(lexicality="Non-word")
+
+lowacc_lowrt_n <- data %>%
+  filter((accuracy <= quantiles_fake_acc[1]) & (rt<=quantiles_fake_rt[1]))%>%
+  mutate(performance="Lo ACC, Lo RT")%>%
+  mutate(lexicality="Non-word")
+
+highacc_highrt<-rbind(highacc_highrt_w, highacc_highrt_n)
+highacc_lowrt<-rbind(highacc_lowrt_n, highacc_lowrt_w)
+lowacc_highrt<-rbind(lowacc_highrt_n,lowacc_highrt_w)
+lowacc_lowrt<-rbind(lowacc_lowrt_n,lowacc_lowrt_w) 
+
+allquantiles<-rbind(highacc_highrt,highacc_lowrt,lowacc_highrt,lowacc_lowrt)
+realquantiles<-allquantiles%>%
+  filter(lexicality=="Real word")
+
+hACC_hRT<-ggplot(highacc_highrt, aes(x = accuracy, y = rt))+
+  geom_point(aes(color = nletters))+
+  facet_wrap(~lexicality)+
+  scale_colour_gradientn(colors = terrain.colors(10))+
+  labs(title = "High ACC / High RT", y = "Reaction Time (ms)", x = "Accuracy",color="# letters")+
+  theme_minimal()+
+  theme(text = element_text(family="serif"),plot.title = element_text(hjust=.5, size=16))
+
+hACC_lRT<-ggplot(highacc_lowrt, aes(x = accuracy, y = rt))+
+  geom_point(aes(color = nletters))+
+  facet_wrap(~lexicality)+
+  scale_colour_gradientn(colors = terrain.colors(10))+
+  labs(title = "High ACC / Low RT", y = "Reaction Time (ms)", x = "Accuracy",color="# letters")+
+  theme_minimal()+
+  theme(text = element_text(family="serif"),plot.title = element_text(hjust=.5, size=16))
+
+lACC_hRT<-ggplot(lowacc_highrt, aes(x = accuracy, y = rt, color=nletters))+
+  geom_point(aes(color = nletters))+
+  facet_wrap(~lexicality)+
+  scale_colour_gradientn(colors = terrain.colors(10))+
+  labs(title = "Low ACC / High RT", y = "Reaction Time (ms)", x = "Accuracy",color="# letters")+
+  theme_minimal()+
+  theme(text = element_text(family="serif"),plot.title = element_text(hjust=.5, size=16))
+
+lACC_lRT<-ggplot(lowacc_lowrt, aes(x = accuracy, y = rt))+
+  geom_point(aes(color = nletters))+
+  facet_wrap(~lexicality)+
+  scale_colour_gradientn(colors = terrain.colors(10))+
+  labs(title = "Low ACC / Low RT", y = "Reaction Time (ms)", x = "Accuracy", color="# letters")+
+  theme_minimal()+
+  theme(text = element_text(family="serif"),plot.title = element_text(hjust=.5, size=16))
+
+hACC_hRT
+hACC_lRT
+lACC_hRT
+lACC_lRT
+```
+
+For nletters in the each quantile, faceted for lexicality (real vs. non-real words), we can see a clear inverse relationship between the number of letters in a word and the reaction time needed to classifying the word.
+
+Within the real words dataset, there is additional metadata that we can examine to try to find patterns of confidence and familiarity.  The first thing we can examine is parts of speech.
+
+In making a layered density distribution, we can examine the "rankings" of the parts of speech that are most commonly found in low response times and high accuracy rates, thus making the words more "word-like." 
+
+```{r echo=FALSE, warnings=FALSE, results=FALSE}
+# Remove 1 instance of Article
+realwords<-realwords%>%
+  filter(synclass_simple!="Article", synclass_simple!="Contraction")
+
+density1<-ggplot(realwords, aes(x = rt, y = reorder(synclass_simple,-rt), fill=synclass_simple)) + 
+  geom_density_ridges2(scale=2.5, size=.25, alpha=.8, color="grey30")+
+  scale_y_discrete(expand = c(0.01, 0))+  
+  scale_x_continuous(expand = c(0, 0), breaks = seq(300,1600,200))+
+  labs(title="Density distribution of RT by Parts of Speech",y="Parts of Speech", x="Reaction time (ms)")+
+  theme_ridges()+
+  theme(text = element_text(family="serif"),
+        plot.title = element_text(hjust=.5, size=14), 
+        axis.title.x = element_text(hjust=.5, size=12),
+        axis.title.y = element_text(hjust=.5, size=12),
+        legend.position = "none")
+
+density2<-ggplot(realwords, aes(x = accuracy, y=reorder(synclass_simple,-accuracy), fill=synclass_simple)) +
+  geom_density_ridges2(scale=2.5, size=.25, alpha=.8, color="grey30")+
+  scale_y_discrete(expand = c(0.01, 0)) +  
+  scale_x_continuous(expand = c(0, 0), breaks = seq(0,1,.2))+
+  labs(title="Density distribution of Accuracy by Parts of Speech", y="Part of Speech", x="Accuracy")+
+  theme_ridges()+
+  theme(text = element_text(family="serif"),
+        plot.title = element_text(hjust=.5, size=14), 
+        axis.title.x = element_text(hjust=.5, size=12),
+        axis.title.y = element_text(hjust=.5, size=12),
+        legend.position = "none")
+
+suppressMessages(print(density1))
+suppressMessages(print(density2))
+
+```
+
+
+Immediately, the rankings seem to be correlated.  There is a bit of interchangability among them, but generally the rankings for low response time and high accuracy are similar.  They go multiple/pronoun --> conjunction/preposition/verb --> Adverb --> Adjective --> Noun --> Interjection --> Undefined.  Here, the category of "multiple" refers to words which can function in multiple categories (e.g. "about" can be an adjective, adverb, or preposition). From this we can see a general pattern among the parts of speech of words that have high accuracy and low response times, and such words are those that can be identified as word-like.
+
+### Coltheart's N
+
+Coltheart's N functions as a measure of orthographic similarity of words, and describes the number of words that have a minimum edit distance of 1 from a given word. The distribution below allows us to examine words which are similar to other words (different by only one letter).  This measure applies to both real and non-real words.
+
+```{r echo=FALSE, warnings=FALSE, results=FALSE}
+# Go deeper into quantile data
+highacc_highrt_morphology<-highacc_highrt %>%  
+  drop_na(morphology)%>%
+  filter(lexicality=="Real word")%>%
+  group_by(morphology,nsyl,nletters,coltheart.N,performance)%>%
+  tally()
+
+highacc_lowrt_morphology<-highacc_lowrt %>%
+  drop_na(morphology)%>%
+  filter(lexicality=="Real word")%>%
+  group_by(morphology,nsyl,coltheart.N,nletters,performance)%>%
+  tally()
+
+lowacc_highrt_morphology<-lowacc_highrt %>%
+  drop_na(morphology)%>%
+  filter(lexicality=="Real word")%>%
+  group_by(morphology,nsyl,coltheart.N,nletters,performance)%>%
+  tally()
+
+lowacc_lowrt_morphology<-lowacc_lowrt %>%
+  drop_na(morphology)%>%
+  filter(lexicality=="Real word")%>%
+  group_by(morphology,nsyl,coltheart.N,nletters,performance)%>%
+  tally()
+
+real<-rbind(highacc_highrt_morphology,highacc_lowrt_morphology,lowacc_highrt_morphology,lowacc_lowrt_morphology)
+
+coltheart<-allquantiles%>%
+  select(spelling, lexicality, coltheart.N, performance)
+
+ggplot(coltheart, aes(x = performance, y = coltheart.N, color=performance))+
+  labs(title = "Coltheart N Distributions", y = "Coltheart.N", x = "Performance")+
+  geom_jitter(alpha=.2)+
+  geom_boxplot(alpha=.8)+
+  theme_minimal()+
+  theme(plot.title = element_text(hjust=.5, size=16), 
+        legend.position = "NONE",
+        text = element_text(family="serif"))+
+  stat_summary(fun.y=mean, colour="black", 
+               geom="text", size=3.5,
+               vjust = .7,
+               aes(label=round(..y.., digits=3)))
+```
+
+The mean Colheart's measure is highest for words with lowest accuracy and response time (4.761), and the lowest for words with the highest accuracy and response time (0.885). Additionally, Coltheart's N is about equal for words with high accuracy/low RT and low accuracy/high RT.  This indicates that Colheart's measure is liked to both accuracy and reaction time.  The more neighbors that a word has (higher Coltheart's measure), the more likely an error is going to be made (lower accuracy) with a quicker response time (greater confidence in choice).  The contrapositive also appears true based on this distribution.
+
+
+### Morphological Analysis
+
+Finally, we want to see if the morphology of a word has any impact on its perceived word-likeness.  To do so, we filter for real words (this information is not available for non-real words) and look at the morphological metadata attributed to each word.
+
+We can now break down the quadrants by morphology and look for patterns.
+
+```{r echo=FALSE, warnings=FALSE, results=FALSE}
+# Let's see what the quantiles are made up of
+
+# Morphological breakdown of quantiles by number of letters
+
+ggplot(data=real, aes(x=reorder(morphology,n), y=n))+
+  geom_point()+
+  theme_minimal()+
+  facet_grid(~performance)+
+  labs(title = "Morphological Breakdowns", y = "Count (Log-10 scale)", x = "Morphology")+
+  scale_y_continuous(trans="log10")+
+  scale_colour_gradientn(colors = heat.colors(12))+
+  theme(legend.position = "right", 
+        legend.box.margin = margin(0, 0, 0, 0, "cm"), legend.text = element_text(size=8, color = "red"))+
+  theme(axis.text.x = element_text(angle=45, hjust=1, size=8), 
+        axis.text.y = element_text(size=7),
+        text = element_text(family="serif"),
+        plot.title = element_text(hjust=.5, size=16))+
+  coord_flip()
+
+```
+
+From this chart, we can see that there is a variation of morphological frequency in all quadrants, particularly in the two opposites "Hi ACC, Lo RT" and "Lo ACC, Hi RT."  The morphological data in these two quadrants are mirrors of each other and thus contradicting.  Therefore, we cannot determine if morphology has an impact on either response time or accuracy.
+
+
+### Conclusions
+
+Based on the analyses conducted above, we've concluded that a few features we examined impact native English-speakers' perceptions of a word as being word-like. The number of letters is related to the subject's response time and thus their confidence in their answer. Shorter words elicit a lower response time. Additionally, the more orthographical neighbors a word has, or the more common-looking a word is, the faster participants are likely to identify it as real--but inaccurately so. Conversely, the fewer orthographical neighbors a word has, or the more unique-looking a word is, the longer participants will likely spend classifying the word--and usually with high accuracy. Finally, a word's part of speech appears to play a role in how accurately and quickly participants were able to identify real and fake words. Pronouns, conjunctions, pure verbs, and words with multiple parts of speech inspired the fastest and most accurate reactions, while pure nouns, interjections, and adjectives elicited the slowest and most inaccurate reactions. There appears to be no relationship between morphological breakdowns and response time or accuracy.
